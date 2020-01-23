@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import com.example.batch.listener.ListJobExecutionListener;
+import com.example.batch.processor.JobRestartStep;
 import com.example.batch.processor.ProcessorTasklet;
 import com.example.batch.reader.ReaderTasklet;
 import com.example.batch.writer.JobEndingTasklet;
@@ -32,6 +33,10 @@ public class SpringBatchConfig {
 	@Bean
 	public JobExecutionDecider decider() {
 		return new ListExecutionDecider();
+	}
+	
+	@Bean JobExecutionDecider restartDecider() {
+		return new ListExecutionRestartDecider();
 	}
 	
 	@Bean
@@ -63,6 +68,13 @@ public class SpringBatchConfig {
 	}
 	
 	@Bean
+	public Step jobRestartStep() {
+		return stepBuilderFactory.get("jobRestartStep")
+				.tasklet(new JobRestartStep())
+				.build();
+	}
+	
+	@Bean
 	public Job listJob() {
 		
 		Flow flow1 = new FlowBuilder<Flow>("flow1")
@@ -73,10 +85,15 @@ public class SpringBatchConfig {
 				.from(decider()).on(ListExecutionDecider.READ_DONE).to(jobEndingStep())
 				.end();
 		
+		Flow flow2 = new FlowBuilder<Flow>("flow2")
+				.start(restartDecider()).on(ListExecutionRestartDecider.ON_RESTART).to(jobRestartStep())
+				.from(restartDecider()).on(ListExecutionRestartDecider.NOT_ON_RESTART).to(flow1)
+				.end();
+		
 		return jobBuilderFactory.get("listJob")
 				.incrementer(new RunIdIncrementer())
 				.listener(new ListJobExecutionListener())
-				.start(flow1)
+				.start(flow2)
 				.end()
 				.build();
 	}
